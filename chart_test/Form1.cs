@@ -7,11 +7,15 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace WindowsFormsApplication1
 {
     public partial class Form1 : Form
     {
+        Queue gQ = new Queue(); //データ入力
+
         public Form1()
         {
             InitializeComponent();
@@ -172,6 +176,104 @@ namespace WindowsFormsApplication1
             areaAxis.Position.X -= axisOffset;
             areaAxis.InnerPlotPosition.X += labelsSize;
 
+        }
+        public string xGetPart(string src, string name)
+        {
+            //カンマ区切りされたsrcからnameの次の文字列を返す
+            //なかったら"null"を返す
+            string ret_string = "null";
+            string[] part = src.Split(',');
+            for (int i = 0; i < part.Length; i++)
+            {
+                if(part[i].Equals(name)){
+                    ret_string = part[i + 1];
+                }
+            }
+            return ret_string;
+
+        }
+        private void xLog(String s)
+        {
+            //ログ出力
+            DateTime dt = DateTime.Now;
+            string logtext = "HEAD," + dt.ToString("yyyyMMddhhmmss") + ",stime," + dt.ToOADate() + "," + s + ",TERM";
+            textBox1.AppendText(logtext + "\n");
+            System.IO.StreamWriter sw = new System.IO.StreamWriter("data.txt", true, System.Text.Encoding.GetEncoding("shift_jis"));
+            sw.WriteLine(logtext);
+            sw.Close();
+        }
+        private void button3_Click(object sender, EventArgs e)
+        {
+            //ファイルから読み込んで表示テスト
+            
+            //ファイルから読んでキューに入れる
+            System.IO.StreamReader file = new System.IO.StreamReader("data.csv");
+            string line;
+            while ((line = file.ReadLine()) != null)
+            {
+                gQ.Enqueue(line);
+            }
+            file.Close();
+            xLog("count=" + gQ.Count);
+
+
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            Series s_temp = new Series();
+            Series s_dew = new Series();
+            Series s_hum = new Series();
+            double time = 0;
+            for (int i = 0; i < gQ.Count; i++)
+            {
+                string s=(string)gQ.Dequeue();
+                if (xGetPart(s, "name").Equals("sotominami"))
+                {
+                    time = double.Parse(xGetPart(s, "stime"));
+                    double tm = double.Parse(xGetPart(s, "temp")) / 10;
+                    double dp = double.Parse(xGetPart(s, "dew"))/10;
+                    double hum = double.Parse(xGetPart(s, "hum"))/10;
+                    DateTime dt = DateTime.FromOADate(time);
+ 
+                    s_temp.Points.AddXY(dt, tm);
+                    s_dew.Points.AddXY(dt, dp);
+                    s_hum.Points.AddXY(dt, hum);
+                    
+                }
+            }
+            s_temp.ChartType = SeriesChartType.FastLine;
+            s_temp.YAxisType = AxisType.Primary;
+            s_temp.Name = "temp";
+            s_dew.ChartType = SeriesChartType.FastLine;
+            s_dew.YAxisType = AxisType.Primary;
+            s_dew.Name = "dew";
+            s_hum.ChartType = SeriesChartType.FastLine;
+            s_hum.YAxisType = AxisType.Secondary;
+            s_hum.Name = "hum";
+
+            chart1.Series.Add(s_temp);
+            chart1.Series.Add(s_dew);
+            chart1.Series.Add(s_hum);
+
+            
+            chart1.ChartAreas[0].AxisX.Minimum = (int)time-1;
+            chart1.ChartAreas[0].AxisX.Maximum = (int)time+1;
+            chart1.ChartAreas[0].AxisX.Interval = 1/24;
+            chart1.ChartAreas[0].AxisX.LabelStyle.Format="MM/dd HH:mm";
+            chart1.ChartAreas[0].AxisY.Minimum = -10;
+            chart1.ChartAreas[0].AxisY.Maximum = 40;
+            chart1.ChartAreas[0].AxisY.Interval = 10;
+            chart1.ChartAreas[0].AxisY2.Minimum = 0;
+            chart1.ChartAreas[0].AxisY2.Maximum = 100;
+            chart1.ChartAreas[0].AxisY2.Interval = 20;
+
+            
+//            chart1.Legends[1].Alignment = StringAlignment.Near;
+//            chart1.Legends[2].Alignment = StringAlignment.Near;
+
+ //               x1.LabelStyle.Format = "HH:mm"
+            //
         }
     }
 }
