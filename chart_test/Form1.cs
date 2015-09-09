@@ -8,7 +8,7 @@ using System.Text;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using System.Collections;
-using System.Collections.Generic;
+
 
 namespace WindowsFormsApplication1
 {
@@ -16,81 +16,70 @@ namespace WindowsFormsApplication1
     {
 //        List<string> gList = new List<string> { Capacity = 40000000 };
         List<string> gList = new List<string>();
+        Queue gQ;
+        System.Net.Sockets.UdpClient udpClient;
 
         public Form1()
         {
             InitializeComponent();
+            gQ = new Queue();
+            xInitUdp();
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void ReceiveCallback(IAsyncResult ar)
         {
-            //Seriesの作成
-            Series test = new Series();
-            Series test2 = new Series();
-            Series seri1 = new Series();
-            Series seri2 = new Series();
-            Series seri3 = new Series();
+            //UDP受信のコールバック
+            //受信データをgQに入れる
 
-            //グラフのタイプを指定
-            test.ChartType = SeriesChartType.StepLine;
- 
- 
-            //グラフのデータを追加
-            for (int i = 1; i < 24; i++)
+            System.Net.Sockets.UdpClient udp =(System.Net.Sockets.UdpClient)ar.AsyncState;
+
+            //非同期受信を終了する
+            System.Net.IPEndPoint remoteEP = null;
+            byte[] rcvBytes;
+            try
             {
-                DateTime dt;
-                dt=new DateTime(2000, 8, 1, i, 30, 0);
-                test.Points.AddXY(dt, Math.Sin(i * Math.PI / 180.0));
-                seri1.Points.AddXY(dt, Math.Sin(i * Math.PI / 180.0));
-                seri2.Points.AddXY(dt, Math.Cos(i * Math.PI / 180.0));
-                seri3.Points.AddXY(dt, Math.Sinh(i * Math.PI / 180.0));
-
+                rcvBytes = udp.EndReceive(ar, ref remoteEP);
+            }
+            catch (System.Net.Sockets.SocketException ex)
+            {
+                Console.WriteLine("受信エラー({0}/{1})",
+                    ex.Message, ex.ErrorCode);
+                return;
+            }
+            catch (ObjectDisposedException ex)
+            {
+                //すでに閉じている時は終了
+                Console.WriteLine("Socketは閉じられています。");
+                return;
             }
 
-            //作ったSeriesをchartコントロールに追加する
-            chart1.Series.Add(test);
-            chart2.Series.Add(seri1);
-            chart2.Series.Add(seri2);
-            chart2.Series.Add(seri3);
-            chart2.Series[1].ChartArea = "Default";
-            chart2.Series[2].ChartArea = "Default";
+            //データを文字列に変換する
+            string rcvMsg = System.Text.Encoding.UTF8.GetString(rcvBytes);
+            rcvMsg.Replace("\n", " ").Replace("\r", "");
+            //受信したデータをキューに入れる
+            string displayMsg = string.Format("ip,{0},port,{1},msg,{2}", remoteEP.Address, remoteEP.Port, rcvMsg.Replace("\n", " ").Replace("\r", ""));
+            //           textBox1.BeginInvoke(
+            //               new Action<string>(AppendText), displayMsg);
+            gQ.Enqueue(displayMsg);
 
-
-            //chart2.Series[0].Name = "t";
-            //CreateYAxis(chart2, chart2.ChartAreas[0], chart2.Series[1], 13, 8);
-            //CreateYAxis(chart2, chart2.ChartAreas[0], chart2.Series[2], 22, 8);
-
-
+            //再びデータ受信を開始する
+            udp.BeginReceive(ReceiveCallback, udp);
+        }
+        private void xInitUdp()
+        {
+            int portno = 4126;
+            if (udpClient != null)
+            {
+                return;
+            }
             
-        }
+            //UdpClientを作成し、指定したポート番号にバインドする
+            System.Net.IPEndPoint localEP = new System.Net.IPEndPoint(System.Net.IPAddress.Any, portno);
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-            //軸ラベルの設定
-            chart1.ChartAreas[0].AxisX.Title = "angle(rad)";
-            chart1.ChartAreas[0].AxisY.Title = "sin";
-            //※Axis.TitleFontでフォントも指定できるがこれはデザイナで変更したほうが楽
-
-            //X軸最小値、最大値、目盛間隔の設定
-            DateTime dt1 = new DateTime(2000, 8, 1, 13, 30, 0);
-            DateTime dt2 = new DateTime(2000, 8, 31, 13, 30, 0);
-
-            chart1.ChartAreas[0].AxisX.Minimum = dt1.ToOADate();
-            chart1.ChartAreas[0].AxisX.Maximum = dt2.ToOADate();
-            chart1.ChartAreas[0].AxisX.Interval = 60;
-
-            //Y軸最小値、最大値、目盛間隔の設定
-            chart1.ChartAreas[0].AxisY.Minimum = -1;
-            chart1.ChartAreas[0].AxisY.Maximum = 1;
-            chart1.ChartAreas[0].AxisY.Interval = 0.2;
-
-            //目盛線の消去
-            //chart1.ChartAreas["area1"].AxisX.MajorGrid.Enabled = false;
-            //chart1.ChartAreas["area1"].AxisY.MajorGrid.Enabled = false;
-        }
-
-        private void checkBox1_CheckedChanged(object sender, EventArgs e)
-        {
+            udpClient = new System.Net.Sockets.UdpClient(localEP);
+            //非同期的なデータ受信を開始する
+            udpClient.BeginReceive(ReceiveCallback, udpClient);
+            xLog("udp open. port="+portno);
 
         }
 
@@ -110,11 +99,21 @@ namespace WindowsFormsApplication1
             return ret_string;
 
         }
+        private void xWriteFile(String s)
+        {
+            //ファイルにデータ出力
+            DateTime dt = DateTime.Now;
+            string logtext = "HEAD," + dt.ToString("yyyyMMddhhmmss") + ",stime," + dt.ToOADate() + "," + s + ",TERM";
+            textBox1.AppendText(logtext + "\n");
+            System.IO.StreamWriter sw = new System.IO.StreamWriter("data.txt", true, System.Text.Encoding.GetEncoding("shift_jis"));
+            sw.WriteLine(logtext);
+            sw.Close();
+        }
         private void xLog(String s)
         {
             //ログ出力
             DateTime dt = DateTime.Now;
-            string logtext = "HEAD," + dt.ToString("yyyyMMddhhmmss") + ",stime," + dt.ToOADate() + "," + s + ",TERM";
+            string logtext = dt.ToString("yyyy/MM/dd hh:mm:ss ") + s;
             textBox1.AppendText(logtext + "\n");
             System.IO.StreamWriter sw = new System.IO.StreamWriter("log.txt", true, System.Text.Encoding.GetEncoding("shift_jis"));
             sw.WriteLine(logtext);
@@ -122,7 +121,12 @@ namespace WindowsFormsApplication1
         }
         private void button3_Click(object sender, EventArgs e)
         {
-            
+            xLoadFile();
+
+
+        }
+        private void xLoadFile()
+        {
 
             //ファイルから読み込んで表示テスト
             var fs = System.IO.File.OpenRead("data.txt");
@@ -146,18 +150,23 @@ namespace WindowsFormsApplication1
             xLog("count=" + gList.Count);
             xLog("last line=" + line);
             xLog("capacity=" + gList.Capacity);
-
+        }
+        private void button4_Click(object sender, EventArgs e)
+        {
+            xDragAllChart();
         }
 
-        private void button4_Click(object sender, EventArgs e)
+        private void xDragAllChart()
         {
             xDrawChart("sotominami", chart1);
             xDrawChart("LDK", chart2);
             xDrawChart("1F_HALL", chart3);
             xDrawChart("2F_HALL", chart4);
-
+            chart1.SaveImage("chart1.jpg", ChartImageFormat.Jpeg);
+            chart2.SaveImage("chart2.jpg", ChartImageFormat.Jpeg);
+            chart3.SaveImage("chart3.jpg", ChartImageFormat.Jpeg);
+            chart4.SaveImage("chart4.jpg", ChartImageFormat.Jpeg);
         }
-
         private void xDrawChart(string name, Chart cht)
         {
             Series s_temp = new Series();
@@ -272,6 +281,46 @@ namespace WindowsFormsApplication1
         private void button5_Click(object sender, EventArgs e)
         {
             xDrawChart2(new string[]{"sotominami","1F_HALL","2F_HALL","josituki","LDK"},"temp",chart2);
+        }
+
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            while (gQ.Count > 0)
+            {
+                string text;
+                text = (string)gQ.Dequeue();    //キューから取り出す
+
+                xWriteFile(text);
+
+                // カンマ区切りで分割して配列に格納する
+                string[] stArrayData = text.Split(',');
+
+                // データを確認する
+                int i = 0;
+                foreach (string stData in stArrayData)
+                {
+                    xLog(i.ToString()+","+stData);
+                    i++;
+                }
+                /*
+                float temp = float.Parse(stArrayData[7])/10;
+                float hum = float.Parse(stArrayData[9])/10;
+                float dew = float.Parse(stArrayData[11])/10;
+                if (stArrayData[1].Equals("1"))
+                {
+                    label1.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
+                    string sendMsg = "test";
+                    byte[] sendBytes = System.Text.Encoding.UTF8.GetBytes(sendMsg);
+
+                    //リモートホストを指定してデータを送信する
+                    udpClient.Send(sendBytes, sendBytes.Length, "192.168.1.16", 4126);
+
+                }
+                if (stArrayData[1].Equals("2")) label2.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
+                if (stArrayData[1].Equals("3")) label3.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
+                */
+
+            }
         }
 
     }
