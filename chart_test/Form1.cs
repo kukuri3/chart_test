@@ -18,6 +18,7 @@ namespace WindowsFormsApplication1
         List<string> gList = new List<string>();
         Queue gQ;
         System.Net.Sockets.UdpClient udpClient;
+        int gTimeCount = 0;
 
         public Form1()
         {
@@ -53,7 +54,7 @@ namespace WindowsFormsApplication1
                 return;
             }
 
-            //データを文字列に変換する
+            //データを文字列に変換し、キューに入れる
             string rcvMsg = System.Text.Encoding.UTF8.GetString(rcvBytes);
             rcvMsg.Replace("\n", " ").Replace("\r", "");
             //受信したデータをキューに入れる
@@ -153,10 +154,10 @@ namespace WindowsFormsApplication1
         }
         private void button4_Click(object sender, EventArgs e)
         {
-            xDragAllChart();
+            xDrawAllChart();
         }
 
-        private void xDragAllChart()
+        private void xDrawAllChart()
         {
             xDrawChart("sotominami", chart1);
             xDrawChart("LDK", chart2);
@@ -172,6 +173,9 @@ namespace WindowsFormsApplication1
             Series s_temp = new Series();
             Series s_dew = new Series();
             Series s_hum = new Series();
+
+            cht.Series.Clear();
+
             double time = 0;
             for (int i = 0; i < gList.Count; i++)
             {
@@ -285,6 +289,8 @@ namespace WindowsFormsApplication1
 
         private void timer1_Tick(object sender, EventArgs e)
         {
+            //タイマイベント1sec
+            //キューからファイルに書き込む
             while (gQ.Count > 0)
             {
                 string text;
@@ -302,24 +308,13 @@ namespace WindowsFormsApplication1
                     xLog(i.ToString()+","+stData);
                     i++;
                 }
-                /*
-                float temp = float.Parse(stArrayData[7])/10;
-                float hum = float.Parse(stArrayData[9])/10;
-                float dew = float.Parse(stArrayData[11])/10;
-                if (stArrayData[1].Equals("1"))
-                {
-                    label1.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
-                    string sendMsg = "test";
-                    byte[] sendBytes = System.Text.Encoding.UTF8.GetBytes(sendMsg);
+            }
 
-                    //リモートホストを指定してデータを送信する
-                    udpClient.Send(sendBytes, sendBytes.Length, "192.168.1.16", 4126);
-
-                }
-                if (stArrayData[1].Equals("2")) label2.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
-                if (stArrayData[1].Equals("3")) label3.Text = (stArrayData[3] + "\r\n" + temp + "℃\r\n" + hum + "%\r\n" + dew + "℃\r\n");
-                */
-
+            //時々グラフを更新する
+            gTimeCount++;
+            if (gTimeCount >= 100)
+            {
+                xDrawAllChart();
             }
         }
 
